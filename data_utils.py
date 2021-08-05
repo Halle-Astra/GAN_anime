@@ -99,7 +99,7 @@ def img_save(imgs, root, prefix=''):
     for img in imgs:
         img_name = prefix+'_'+str(img_id)+'.png'
         img_path = os.path.join(root, img_name)
-        Image.fromarray(img).save(img_path)
+        Image.fromarray((255*img).astype(np.uint8)).save(img_path)
         img_id += 1
 
 def img2square(img, img_size=512):
@@ -117,6 +117,11 @@ def img2square(img, img_size=512):
     img_new[:img.shape[0], :img.shape[1]] = img
     img = img_new
     return img
+
+def calculate_steps(root, batch_size=16):
+    imgs_list = os.listdir(root)
+    imgs_num = len(imgs_list)
+    return imgs_num//batch_size+1
 
 def train_generator(root, batch_size=16, resize_dst=(512, 512)):
     while True:

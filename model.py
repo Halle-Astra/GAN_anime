@@ -4,6 +4,7 @@ import numpy as np
 from paddle import optimizer
 import os
 from data_utils import img_save
+from tqdm import tqdm
 
 
 class block_unit(nn.Layer):
@@ -148,11 +149,11 @@ class General_GAN(nn.Layer):
         paddle.save(opt_G_params, os.path.join(self.model_root, 'opt_G-{}.params'.format(save_str)))
         paddle.save(opt_D_params, os.path.join(self.model_root, 'opt_D-{}.params'.format(save_str)))
 
-    def fit(self, epochs=200,
+    def fit(self, epochs=2000,
             train_generator=None, val_generator=None,
             loss_function=nn.MSELoss,
             lr_generator=None, lr_discriminator=None,
-            input_constant=False, log_file=None):
+            input_constant=False, log_file=None, steps_tqdm=10):
         if lr_generator is not None:
             self.opt_G.learning_rate = lr_generator
         if lr_discriminator is not None:
@@ -161,62 +162,65 @@ class General_GAN(nn.Layer):
         for i in range(epochs):
             self.epoch = i
             self.step = 0
-            while True:
-                self.step += 1
-                input_tensor = self.input_generate(constant=input_constant, input_size=self.input_shape)
-                img_fake = self.generator(input_tensor)
-                img_real = next(train_generator)
-                if img_real is None:
-                    break
+            with tqdm(total=steps_tqdm) as bar:
+                while True:
+                    self.step += 1
+                    input_tensor = self.input_generate(constant=input_constant, input_size=self.input_shape)
+                    img_fake = self.generator(input_tensor)
+                    img_real = next(train_generator)
+                    if img_real is None:
+                        break
 
-                score_fake = self.discriminator(img_fake)
-                score_real = self.discriminator(img_real)
+                    score_fake = self.discriminator(img_fake)
+                    score_real = self.discriminator(img_real)
 
-                # backward propogation for discriminator
-                label_fake = np.zeros((self.batch_size, 1))
-                label_fake = paddle.to_tensor(label_fake, dtype=np.float32)
-                label_real = np.ones((img_real.shape[0], 1))
-                label_real = paddle.to_tensor(label_real, dtype=np.float32)
+                    # backward propogation for discriminator
+                    label_fake = np.zeros((self.batch_size, 1))
+                    label_fake = paddle.to_tensor(label_fake, dtype=np.float32)
+                    label_real = np.ones((img_real.shape[0], 1))
+                    label_real = paddle.to_tensor(label_real, dtype=np.float32)
 
-                '''想到两种方法进行反向传播
-                1. loss = loss_fake+loss_real
-                   loss.backward()
-                2. loss_fake.backward()
-                   loss_real.backward()
-                看起来第二种能够更加省显存
-                
-                其他涉及detach的地方果然也就主要是节省显存以此加速，那么同理更新生成器时重新生成一批数据应该也是为了节省显存，但增加时间。
-                https://blog.csdn.net/einstellung/article/details/102494795'''
-                loss_fake = loss_function(score_fake, label_fake)
-                loss_real = loss_function(score_real, label_real)
-                self.opt_D.clear_grad()  # 如若不先清空梯度，则后续的backward会累加梯度
-                loss_fake.backward(retain_graph=True)
-                loss_real.backward()
-                self.opt_D.step()
+                    '''想到两种方法进行反向传播
+                    1. loss = loss_fake+loss_real
+                       loss.backward()
+                    2. loss_fake.backward()
+                       loss_real.backward()
+                    看起来第二种能够更加省显存
+                    
+                    其他涉及detach的地方果然也就主要是节省显存以此加速，那么同理更新生成器时重新生成一批数据应该也是为了节省显存，但增加时间。
+                    https://blog.csdn.net/einstellung/article/details/102494795'''
+                    loss_fake = loss_function(score_fake, label_fake)
+                    loss_real = loss_function(score_real, label_real)
+                    self.opt_D.clear_grad()  # 如若不先清空梯度，则后续的backward会累加梯度
+                    loss_fake.backward(retain_graph=True)
+                    loss_real.backward()
+                    self.opt_D.step()
 
-                ''' Error encountered without `retain_graph=True` :
-                RuntimeError: (NotFound) Inputs and outputs of sigmoid_grad do not exist. This may be because:
-                1. You use some output variables of the previous batch as the inputs of the current batch. Please try to call "stop_gradient = True" or "detach()" for these variables.
-                2. You calculate backward twice for the same subgraph without setting retain_graph=True. Please set retain_graph=True in the first backward call.
-                '''
+                    ''' Error encountered without `retain_graph=True` :
+                    RuntimeError: (NotFound) Inputs and outputs of sigmoid_grad do not exist. This may be because:
+                    1. You use some output variables of the previous batch as the inputs of the current batch. Please try to call "stop_gradient = True" or "detach()" for these variables.
+                    2. You calculate backward twice for the same subgraph without setting retain_graph=True. Please set retain_graph=True in the first backward call.
+                    '''
 
-                # backward propogation for generator
-                label_fake_reverse = np.ones((self.batch_size, 1))
-                label_fake_reverse = paddle.to_tensor(label_fake_reverse, dtype=np.float32)
-                loss_fake_generator = loss_function(score_fake, label_fake_reverse)
-                self.opt_G.clear_grad()
-                loss_fake_generator.backward()
-                self.opt_G.step()
+                    # backward propogation for generator
+                    label_fake_reverse = np.ones((self.batch_size, 1))
+                    label_fake_reverse = paddle.to_tensor(label_fake_reverse, dtype=np.float32)
+                    loss_fake_generator = loss_function(score_fake, label_fake_reverse)
+                    self.opt_G.clear_grad()
+                    loss_fake_generator.backward()
+                    self.opt_G.step()
 
-                if self.step%50 == 0:
-                    self.MeanScore_Fake = np.mean(score_fake.numpy())
-                    self.save_model()
-                    log_str = 'Epoch:{}, step:{}, loss_fake_discriminator:{}, loss_real_discriminator:{}, loss_fake_generator:{}, Mean_score_fake:{}'.format(
-                            self.epoch, self.step, loss_fake, loss_real, loss_fake_generator, np.mean(score_fake.numpy()))
-                    img_fake = self.fake_tensors2imgs(img_fake)
-                    img_save(img_fake, './imgs_generated/', 'epoch_{}-step_{}'.format(i, self.step))
-                    paddle.save()
-                    if log_file:
-                        f = open(log_file, 'a')
-                        f.write(log_str+'\n')
-                        f.close()
+                    bar.update(1)
+
+                    if self.epoch%10 == 0:
+                        self.MeanScore_Fake = np.mean(score_fake.numpy())
+                        self.save_model()
+                        log_str = 'Epoch:{}, step:{}, loss_fake_discriminator:{}, loss_real_discriminator:{}, loss_fake_generator:{}, Mean_score_fake:{}'.format(
+                                self.epoch, self.step, loss_fake, loss_real, loss_fake_generator, np.mean(score_fake.numpy()))
+                        print(log_str)
+                        img_fake = self.fake_tensors2imgs(img_fake)
+                        img_save(img_fake, './imgs_generated/', 'epoch_{}-step_{}'.format(i, self.step))
+                        if log_file:
+                            f = open(log_file, 'a')
+                            f.write(log_str+'\n')
+                            f.close()
