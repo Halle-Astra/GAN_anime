@@ -109,6 +109,7 @@ class General_GAN(nn.Layer):
         self.input_shape = input_shape
         self.output_shape = output_shape
         self.model_root = model_root
+        self.total_step = 0
 
     def input_generate(self, batch_size=None, constant=False, input_size=(128, 128)):
         if batch_size is None:
@@ -163,8 +164,10 @@ class General_GAN(nn.Layer):
             self.epoch = i
             self.step = 0
             with tqdm(total=steps_tqdm) as bar:
+                bar.set_description('Epoch:{}, step:{}'.format(self.epoch, self.step))
                 while True:
                     self.step += 1
+                    self.total_step += 1
                     input_tensor = self.input_generate(constant=input_constant, input_size=self.input_shape)
                     img_fake = self.generator(input_tensor)
                     img_real = next(train_generator)
@@ -212,7 +215,7 @@ class General_GAN(nn.Layer):
 
                     bar.update(1)
 
-                    if self.epoch%10 == 0:
+                    if self.total_step%50 == 0:
                         self.MeanScore_Fake = np.mean(score_fake.numpy())
                         self.save_model()
                         log_str = 'Epoch:{}, step:{}, loss_fake_discriminator:{}, loss_real_discriminator:{}, loss_fake_generator:{}, Mean_score_fake:{}'.format(

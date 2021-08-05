@@ -148,6 +148,7 @@ def dataset_resize(root,resize_dst=(512, 512)):
     img_batch = []
     for img_path in imgs_list:
         img = cv2.imread(img_path)
-        img = img2square(img, img_size=resize_dst[0])
-        Image.fromarray(img.astype(np.uint8)).save(img_path)
-        print(img_path, 'is resized.')
+        if img.shape[:-1] != resize_dst:
+            img = img2square(img, img_size=resize_dst[0])
+            Image.fromarray(img.astype(np.uint8)).save(img_path)
+            print(img_path, 'is resized.')
