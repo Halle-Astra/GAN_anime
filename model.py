@@ -5,6 +5,7 @@ from paddle import optimizer
 import os
 from data_utils import img_save
 from tqdm import tqdm
+from paddle.distributed import fleet
 
 
 class block_unit(nn.Layer):
@@ -13,18 +14,22 @@ class block_unit(nn.Layer):
         self.residual = residual
         conv1 = nn.Conv2D(input_channels, output_channels, kernel_size=(3, 3), padding='SAME')
         conv2 = nn.Conv2D(output_channels, output_channels, kernel_size=(3, 3), padding='SAME')
+        self.bn = nn.BatchNorm2D(output_channels)
         self.conv1x1 = nn.Conv2D(input_channels, output_channels, kernel_size=(1, 1), padding='SAME')
         self.act = activation()
         self.block_stem = nn.Sequential(
             conv1,
+            self.bn,
             self.act,
-            conv2
+            conv2,
+            self.bn
         )
 
     def forward(self, x):
         if self.residual:
             x1 = self.block_stem(x)
             x2 = self.conv1x1(x)
+            x2 = self.bn(x2)
             x = x1+x2
         y = self.act(x)
         return y
@@ -42,14 +47,16 @@ class block_unit(nn.Layer):
 
 
 class default_Generator(nn.Layer):
-    def __init__(self, residual=True, block_nums=3):
+    def __init__(self, residual=True, block_nums=5):
         super(default_Generator, self).__init__()
         self.block = block_unit(3, 3, residual)
         self.sampling = nn.Upsample(scale_factor=2)
         modules = [block_unit(1, 3, residual), self.sampling]
         for i in range(block_nums - 2):
             modules.append(self.block)
-            modules.append(self.sampling)
+            if i+1 == (block_nums-2)//2:
+                modules.append(self.sampling)
+        modules.append(self.sampling)
         modules.append(block_unit(3, 3, residual, activation=nn.Tanh))
         self.model = nn.Sequential(*modules)
 
@@ -58,7 +65,7 @@ class default_Generator(nn.Layer):
 
 
 class default_Discriminator(nn.Layer):  # 如果采用Flatten，那么输入应当固定，如果采用GAP，则输入可以不定
-    def __init__(self, residual=True, block_nums=3):
+    def __init__(self, residual=True, block_nums=4):
         super(default_Discriminator, self).__init__()
         self.sampling = nn.MaxPool2D(kernel_size=(2, 2))
         input_channels, output_channels = 3, 64
@@ -66,9 +73,11 @@ class default_Discriminator(nn.Layer):  # 如果采用Flatten，那么输入应�
                    self.sampling]
         for i in range(block_nums - 2):
             input_channels = output_channels
-            output_channels = min(2048, input_channels * 2)
+            output_channels = min(512, input_channels * 2)
             modules.append(block_unit(input_channels, output_channels, residual))
-            modules.append(self.sampling)
+            if i+1 == (block_nums-2)//2:
+                modules.append(self.sampling)
+        modules.append(self.sampling)
         input_channels = output_channels
         output_channels = min(2048, input_channels * 2)
         modules.append(block_unit(input_channels, output_channels, residual))
@@ -110,6 +119,14 @@ class General_GAN(nn.Layer):
         self.output_shape = output_shape
         self.model_root = model_root
         self.total_step = 0
+
+        # fleet.init(is_collective=True)
+        # self.generator = fleet.distributed_model(self.generator)
+        # self.discriminator = fleet.distributed_model(self.discriminator)
+        # self.opt_D = fleet.distributed_optimizer(self.opt_D)
+        # self.opt_G = fleet.distributed_optimizer(self.opt_G)
+        # self.generator = paddle.DataParallel(self.generator)
+        # self.discriminator = paddle.DataParallel(self.discriminator)
 
     def input_generate(self, batch_size=None, constant=False, input_size=(128, 128)):
         if batch_size is None:
@@ -160,10 +177,13 @@ class General_GAN(nn.Layer):
         if lr_discriminator is not None:
             self.opt_D.learning_rate = lr_discriminator
         loss_function = loss_function()
+
+        self.generator.train()
+        self.discriminator.train()
         for i in range(epochs):
             self.epoch = i
             self.step = 0
-            with tqdm(total=steps_tqdm) as bar:
+            with tqdm(total=steps_tqdm, ncols=100) as bar:
                 bar.set_description('Epoch:{}, step:{}'.format(self.epoch, self.step))
                 while True:
                     self.step += 1
@@ -219,7 +239,7 @@ class General_GAN(nn.Layer):
                         self.MeanScore_Fake = np.mean(score_fake.numpy())
                         self.save_model()
                         log_str = 'Epoch:{}, step:{}, loss_fake_discriminator:{}, loss_real_discriminator:{}, loss_fake_generator:{}, Mean_score_fake:{}'.format(
-                                self.epoch, self.step, loss_fake, loss_real, loss_fake_generator, np.mean(score_fake.numpy()))
+                                self.epoch, self.step, loss_fake.numpy(), loss_real.numpy(), loss_fake_generator.numpy(), np.mean(score_fake.numpy()))
                         print(log_str)
                         img_fake = self.fake_tensors2imgs(img_fake)
                         img_save(img_fake, './imgs_generated/', 'epoch_{}-step_{}'.format(i, self.step))

@@ -5,6 +5,7 @@ import os
 import random
 from PIL import Image
 import numpy as np
+from tqdm import tqdm
 from matplotlib import pyplot as plt
 
 
@@ -102,7 +103,7 @@ def img_save(imgs, root, prefix=''):
         Image.fromarray((255*img).astype(np.uint8)).save(img_path)
         img_id += 1
 
-def img2square(img, img_size=512):
+def img2square(img, img_size=512, fill_value=1):
     H,W = img.shape[:-1]
     max_size = max([H, W])
     max_side = np.argmax([H, W])
@@ -113,7 +114,7 @@ def img2square(img, img_size=512):
     shape_new[1 - max_side] = max_new
     shape_new[1 - another_side] = another_new
     img = cv2.resize(img, tuple(shape_new))
-    img_new = np.ones((img_size, img_size, 3))
+    img_new = fill_value*np.ones((img_size, img_size, 3))
     img_new[:img.shape[0], :img.shape[1]] = img
     img = img_new
     return img
@@ -145,10 +146,14 @@ def train_generator(root, batch_size=16, resize_dst=(512, 512)):
 def dataset_resize(root,resize_dst=(512, 512)):
     imgs_list = os.listdir(root)
     imgs_list = [os.path.join(root, img_name) for img_name in imgs_list]
-    img_batch = []
-    for img_path in imgs_list:
-        img = cv2.imread(img_path)
-        if img.shape[:-1] != resize_dst:
-            img = img2square(img, img_size=resize_dst[0])
-            Image.fromarray(img.astype(np.uint8)).save(img_path)
-            print(img_path, 'is resized.')
+    with tqdm(total=len(imgs_list), ncols=100) as bar:
+        bar.set_description('Dataset Checking')
+        for img_path in imgs_list:
+            img = cv2.imread(img_path)[..., :3]
+            if img.shape[:-1] != resize_dst:
+                img = img2square(img, img_size=resize_dst[0], fill_value=255)
+                img = img.astype(np.uint8)
+                img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                Image.fromarray(img).save(img_path)
+                print(img_path, 'is resized.')
+            bar.update(1)
