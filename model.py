@@ -19,9 +19,9 @@ class block_unit(nn.Layer):
         self.act = activation()
         self.block_stem = nn.Sequential(
             conv1,
-            self.bn,
+            #self.bn,
             self.act,
-            conv2,
+            #conv2,
             self.bn
         )
 
@@ -29,7 +29,7 @@ class block_unit(nn.Layer):
         if self.residual:
             x1 = self.block_stem(x)
             x2 = self.conv1x1(x)
-            x2 = self.bn(x2)
+            #x2 = self.bn(x2)
             x = x1+x2
         y = self.act(x)
         return y
@@ -65,7 +65,7 @@ class default_Generator(nn.Layer):
 
 
 class default_Discriminator(nn.Layer):  # 如果采用Flatten，那么输入应当固定，如果采用GAP，则输入可以不定
-    def __init__(self, residual=True, block_nums=4):
+    def __init__(self, residual=True, block_nums=6):
         super(default_Discriminator, self).__init__()
         self.sampling = nn.MaxPool2D(kernel_size=(2, 2))
         input_channels, output_channels = 3, 64
@@ -235,7 +235,7 @@ class General_GAN(nn.Layer):
 
                     bar.update(1)
 
-                    if self.total_step%50 == 0:
+                    if self.total_step%1 == 0:
                         self.MeanScore_Fake = np.mean(score_fake.numpy())
                         self.save_model()
                         log_str = 'Epoch:{}, step:{}, loss_fake_discriminator:{}, loss_real_discriminator:{}, loss_fake_generator:{}, Mean_score_fake:{}'.format(

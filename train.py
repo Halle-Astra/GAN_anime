@@ -13,7 +13,7 @@ if __name__ == '__main__':
     anime_gan = General_GAN(batch_size=batch_size)
     # def train():
     #     dist.init_parallel_env()
-    anime_gan.fit(log_file='train_20210805.log', train_generator=train_generator, steps_tqdm=steps)
+    anime_gan.fit(log_file='train_20210805.log', train_generator=train_generator, steps_tqdm=steps, input_constant=False)
 
     # dist.spawn(train, nprocs=2)
 
