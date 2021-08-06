@@ -28,7 +28,8 @@ class Unet_Generator(nn.Layer):
         self.output_block = nn.Sequential(
             nn.ReLU(),
             nn.Conv2DTranspose(ngf*2, output_nc, kernel_size=4, stride=2, padding=1),
-            nn.Sigmoid()  # 原本是tanh
+            nn.LeakyReLU(0.2)
+            #nn.Sigmoid()  # 原本是tanh
         )
 
     def forward(self, x):
@@ -93,5 +94,6 @@ class Upsample(nn.Layer):
 
     def forward(self, x, skip):
         x = self.layers(x)
-        x = paddle.concat([x, skip], axis=1)
+        x = paddle.concat([x, x[:, :skip.shape[1], :, :]], axis=1)
+        # x = paddle.concat([x, skip], axis=1)
         return x

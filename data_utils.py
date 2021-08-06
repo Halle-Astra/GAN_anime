@@ -7,6 +7,7 @@ from PIL import Image
 import numpy as np
 from tqdm import tqdm
 from matplotlib import pyplot as plt
+import random
 
 
 class Augmentation:
@@ -131,7 +132,9 @@ def train_generator(root, batch_size=16, resize_dst=(512, 512)):
         imgs_list = os.listdir(root)
         imgs_list = [os.path.join(root, img_name) for img_name in imgs_list]
         img_batch = []
-        for img_path in imgs_list:
+        # for img_path in imgs_list:
+        for i in range(len(imgs_list)):
+            img_path = random.choice(imgs_list)
             img = cv2.imread(img_path)
             img = img_as_float32(img)
             if img.shape[:-1] != resize_dst:

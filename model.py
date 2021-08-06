@@ -81,12 +81,12 @@ class ResNet_Discriminator(nn.Layer):
     def __init__(self):
         super(ResNet_Discriminator, self).__init__()
         self.resnet = resnet18(pretrained=True, num_classes=1)
-        self.act = nn.Sigmoid()
+        # self.act = nn.Sigmoid()
 
     def forward(self, x):
         x = self.resnet(x)
-        y = self.act(x)
-        return y
+        # x = self.act(x)
+        return x
 
 
 class default_Discriminator(nn.Layer):  # 如果采用Flatten，那么输入应当固定，如果采用GAP，则输入可以不定
@@ -120,8 +120,8 @@ class default_Discriminator(nn.Layer):  # 如果采用Flatten，那么输入应�
         x = self.backbone(x)
         x = self.head(x)
         x = paddle.squeeze(x, axis=(2, 3))
-        y = self.output_act(x)
-        return y
+        # x = self.output_act(x)
+        return x
 
 
 class General_GAN(nn.Layer):
@@ -129,7 +129,7 @@ class General_GAN(nn.Layer):
                  Discriminator=ResNet_Discriminator,
                  optimizer_generator=optimizer.Adam,
                  optimizer_discriminator=optimizer.Adam,
-                 lr_generator=1e-3, lr_discriminator=1e-3, batch_size=16,
+                 lr_generator=1e-4, lr_discriminator=1e-4, batch_size=16,
                  input_shape=None, output_shape=(512, 512), input_generate=None,
                  model_root='models'):
         super().__init__()
@@ -286,7 +286,7 @@ class General_GAN(nn.Layer):
 
                     bar.update(1)
 
-                    if self.total_step % 20 == 0:
+                    if self.total_step % 200 == 0:
                         self.MeanScore_Fake = np.mean(score_fake.numpy())
                         self.save_model()
                         log_str = 'Epoch:{}, step:{}, loss_fake_discriminator:{}, loss_real_discriminator:{}, loss_fake_generator:{}, Mean_score_fake:{}'.format(
