@@ -89,13 +89,15 @@ class Augmentation:
         self.size_uniform()
         return np.asarray(self.img), np.asarray(self.seg)
 
-def img_save(imgs, root, prefix=''):
+def img_save(imgs, root, prefix='', save_num=None):
     if not os.path.exists(root):
         os.makedirs(root)
     if not isinstance(prefix, str):
         prefix = str(prefix)
     if isinstance(imgs, np.ndarray):
         imgs = [imgs]
+    if save_num is not None:
+        imgs = imgs[:save_num]
     img_id = 0
     for img in imgs:
         img_name = prefix+'_'+str(img_id)+'.png'
@@ -157,3 +159,10 @@ def dataset_resize(root,resize_dst=(512, 512)):
                 Image.fromarray(img).save(img_path)
                 print(img_path, 'is resized.')
             bar.update(1)
+
+def clear_output():
+    clear_str = ['rm models/*',
+                 'rm imgs_generated/*']
+    for cstr in clear_str:
+        os.system(cstr)
+        print(cstr)
